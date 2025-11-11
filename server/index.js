@@ -28,6 +28,41 @@ pool.connect((err, client, release) => {
 app.use(cors());
 app.use(express.json());
 
+const path = require('path');
+const multer = require('multer');
+
+// --- File Upload Setup ---
+// Make the 'uploads' directory publicly accessible
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    // Create a unique filename to avoid overwriting
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// --- Upload Endpoint ---
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).send({ message: 'Please upload a file.' });
+  }
+  // The file is uploaded, return the path to be stored in the database
+  // The path should be relative to the server's root URL
+  res.status(200).send({
+    message: 'File uploaded successfully.',
+    // The path includes the '/uploads/' prefix which we made static
+    filePath: `/uploads/${req.file.filename}`
+  });
+});
+
 // Import routes
 const contentRoutes = require('./routes/content.routes');
 const eventRoutes = require('./routes/event.routes');

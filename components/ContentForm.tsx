@@ -13,6 +13,8 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
   const [formData, setFormData] = useState<any>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
 
   const isEditMode = item && item.id;
 
@@ -32,8 +34,19 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
             }
         }
         setFormData(newItem);
+        if (newItem.body?.imageUrl) {
+          setPreview(`http://localhost:5000${newItem.body.imageUrl}`);
+        }
     }
   }, [item]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setPreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -56,19 +69,42 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
     setIsSubmitting(true);
     setError(null);
 
-    const isEvent = view === 'events';
-    let url = isEvent ? '/api/events' : '/api/content';
-    if (isEditMode) {
-      url = `${url}/${item.id}`;
-    }
-
-    // Ensure the 'type' is included for content items
-    const dataToSend = { ...formData };
-    if (!isEvent) {
-      dataToSend.type = view;
-    }
-
     try {
+      let imageUrl = formData.body?.imageUrl || '';
+
+      // 1. If a new file is selected, upload it first
+      if (selectedFile) {
+        const uploadFormData = new FormData();
+        uploadFormData.append('image', selectedFile);
+
+        const uploadResponse = await fetch('http://localhost:5000/api/upload', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload image.');
+        }
+
+        const uploadResult = await uploadResponse.json();
+        imageUrl = uploadResult.filePath; // Get the path from the backend
+      }
+
+      // 2. Prepare the data for the final submission
+      const isEvent = view === 'events';
+      let url = isEvent ? '/api/events' : 'http://localhost:5000/api/content';
+      if (isEditMode) {
+        url = `${url}/${item.id}`;
+      }
+
+      const dataToSend = { ...formData };
+      if (!isEvent) {
+        dataToSend.type = view;
+        // Make sure body exists and update imageUrl
+        dataToSend.body = { ...dataToSend.body, imageUrl };
+      }
+
+      // 3. Submit the form data (with the new image URL if applicable)
       const response = await fetch(url, {
         method: isEditMode ? 'PUT' : 'POST',
         headers: {
@@ -102,7 +138,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
           name="title"
           value={formData.title || ''}
           onChange={handleInputChange}
-          className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
           required
         />
       </div>
@@ -115,7 +151,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
               name="slug"
               value={formData.slug || ''}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
             />
           </div>
           <div className="mb-4">
@@ -124,7 +160,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
               name="summary"
               value={formData.summary || ''}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
             />
           </div>
            <div className="mb-4">
@@ -133,7 +169,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
                 name="status"
                 value={formData.status || 'draft'}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
             >
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
@@ -151,14 +187,19 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
       case 'gallery':
         return (
           <div className="mb-4">
-            <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Image URL</label>
+            <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Image</label>
             <input
-              type="text"
-              name="imageUrl"
-              value={formData.body?.imageUrl || ''}
-              onChange={handleBodyChange}
-              className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400"
             />
+            {preview && (
+              <div className="mt-4">
+                <img src={preview} alt="Image Preview" className="w-48 h-auto rounded-lg shadow-md" />
+                <p className="text-xs text-gray-500 mt-1">Image Preview</p>
+              </div>
+            )}
           </div>
         );
       case 'events':
@@ -170,7 +211,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
                     name="description"
                     value={formData.description || ''}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
                     placeholder="Enter event description"
                     title="Event description"
                     />
@@ -185,7 +226,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
                         placeholder="Enter event location"
                         value={formData.location || ''}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
                     />
                 </div>
                 <div className="mb-4">
@@ -195,30 +236,30 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
                             name="is_all_day"
                             checked={formData.is_all_day || false}
                             onChange={(e) => setFormData({ ...formData, is_all_day: e.target.checked })}
-                            className="mr-2"
+                            className="w-4 h-4 text-brand-blue bg-gray-100 border-gray-300 rounded focus:ring-brand-blue dark:focus:ring-brand-blue dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
                         />
-                        All Day Event
+                        <span className="ml-2 text-sm font-medium text-gray-900 dark:text-gray-300">All Day Event</span>
                     </label>
                 </div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                         <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Start Date</label>
-                        <input type="date" name="start_date" aria-label="Event start date" title="Event start date" placeholder="YYYY-MM-DD" value={formData.start_date || ''} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white" required />
+                        <input type="date" name="start_date" aria-label="Event start date" title="Event start date" placeholder="YYYY-MM-DD" value={formData.start_date || ''} onChange={handleInputChange} className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue" required />
                     </div>
                     <div>
                         <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">End Date</label>
-                        <input type="date" name="end_date" aria-label="Event end date" title="Event end date" placeholder="YYYY-MM-DD" value={formData.end_date || ''} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                        <input type="date" name="end_date" aria-label="Event end date" title="Event end date" placeholder="YYYY-MM-DD" value={formData.end_date || ''} onChange={handleInputChange} className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue" />
                     </div>
                 </div>
                 {!formData.is_all_day && (
-                    <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Start Time</label>
-                            <input type="time" name="start_time" aria-label="Event start time" title="Event start time" placeholder="HH:MM" value={formData.start_time || ''} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                            <input type="time" name="start_time" aria-label="Event start time" title="Event start time" placeholder="HH:MM" value={formData.start_time || ''} onChange={handleInputChange} className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue" />
                         </div>
                         <div>
                             <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">End Time</label>
-                            <input type="time" name="end_time" aria-label="Event end time" title="Event end time" placeholder="HH:MM" value={formData.end_time || ''} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                            <input type="time" name="end_time" aria-label="Event end time" title="Event end time" placeholder="HH:MM" value={formData.end_time || ''} onChange={handleInputChange} className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue" />
                         </div>
                     </div>
                 )}
@@ -231,10 +272,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
 
   return (
     <Card className="!bg-white dark:!bg-gray-800">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">
-        {isEditMode ? `Edit ${view}` : `Create New ${view}`}
-      </h2>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="p-6">
         {renderCommonFields()}
         {renderDynamicFields()}
         
