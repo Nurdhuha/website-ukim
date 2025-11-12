@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Dashboard, News, Achievements, Gallery, Events, Pages, MenuIcon } from './icons';
+import { Dashboard, News, Achievements, Gallery, Events, Pages, MenuIcon, BookOpenIcon, LightbulbIcon } from './icons';
 
-type AdminView = 'dashboard' | 'akademik' | 'pengumuman' | 'artikel' | 'prestasi' | 'galeri' | 'events' | 'pages';
+type AdminView = 'dashboard' | 'akademik' | 'pengumuman' | 'artikel' | 'prestasi' | 'galeri' | 'events';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -15,14 +15,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, currentView, setCur
 
   const navItems: { id: AdminView; label: string; icon: JSX.Element }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <Dashboard /> },
-    { id: 'akademik', label: 'Akademik', icon: <News /> },
-    { id: 'pengumuman', label: 'Pengumuman', icon: <News /> },
-    { id: 'artikel', label: 'Artikel', icon: <News /> },
+    { id: 'akademik', label: 'Akademik', icon: <BookOpenIcon /> },
+    { id: 'pengumuman', label: 'Pengumuman', icon: <LightbulbIcon /> },
+    { id: 'artikel', label: 'Artikel', icon: <Pages /> },
     { id: 'prestasi', label: 'Prestasi', icon: <Achievements /> },
-
+    { id: 'events', label: 'Kegiatan', icon: <Events /> },
     { id: 'galeri', label: 'Galeri', icon: <Gallery /> },
-    { id: 'events', label: 'Events', icon: <Events /> },
-    { id: 'pages', label: 'Pages', icon: <Pages /> },
   ];
 
   const handleSetView = (view: AdminView) => {

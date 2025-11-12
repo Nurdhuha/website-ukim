@@ -16,7 +16,20 @@ const getGalleryTypeId = async () => {
 exports.getAllGalleryItems = async (req, res) => {
     try {
         const galleryTypeId = await getGalleryTypeId();
-        const result = await pool.query('SELECT * FROM content WHERE content_type_id = $1 ORDER BY updated_at DESC', [galleryTypeId]);
+        const result = await pool.query(
+            `SELECT 
+                id, 
+                title, 
+                status,
+                summary as department,
+                published_at as "activityDate",
+                body->'imageUrls' as "imageUrls",
+                updated_at
+             FROM content 
+             WHERE content_type_id = $1 
+             ORDER BY updated_at DESC`, 
+            [galleryTypeId]
+        );
         res.json(result.rows);
     } catch (err) {
         console.error('Error fetching admin gallery items:', err);
@@ -29,7 +42,15 @@ exports.getPublicGalleryItems = async (req, res) => {
     try {
         const galleryTypeId = await getGalleryTypeId();
         const result = await pool.query(
-            `SELECT id, title, body->>'imageUrl' as "imageUrl" FROM content WHERE content_type_id = $1 AND status = 'published' ORDER BY published_at DESC`,
+            `SELECT 
+                id, 
+                title, 
+                summary as department,
+                published_at as "activityDate",
+                body->'imageUrls' as "imageUrls"
+             FROM content 
+             WHERE content_type_id = $1 AND status = 'published' 
+             ORDER BY published_at DESC`,
             [galleryTypeId]
         );
         res.json(result.rows);
@@ -41,19 +62,20 @@ exports.getPublicGalleryItems = async (req, res) => {
 
 // POST a new gallery item
 exports.createGalleryItem = async (req, res) => {
-    const { title, body, status } = req.body;
+    const { title, status, department, activityDate, body } = req.body;
 
-    if (!title || !body || !body.imageUrl) {
-        return res.status(400).json({ message: 'Title and imageUrl are required.' });
+    if (!title || !body || !body.imageUrls || body.imageUrls.length === 0) {
+        return res.status(400).json({ message: 'Title and at least one image are required.' });
     }
 
     try {
         const galleryTypeId = await getGalleryTypeId();
+        
         const result = await pool.query(
-            `INSERT INTO content (content_type_id, title, body, author_id, status)
-             VALUES ($1, $2, $3, (SELECT id FROM users WHERE username = 'admin'), $4)
+            `INSERT INTO content (content_type_id, title, summary, body, author_id, status, published_at)
+             VALUES ($1, $2, $3, $4, (SELECT id FROM users WHERE username = 'admin'), $5, $6)
              RETURNING *`,
-            [galleryTypeId, title, body, status || 'draft']
+            [galleryTypeId, title, department, body, status || 'draft', activityDate]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -65,7 +87,7 @@ exports.createGalleryItem = async (req, res) => {
 // PUT to update a gallery item
 exports.updateGalleryItem = async (req, res) => {
     const { id } = req.params;
-    const { title, body, status } = req.body;
+    const { title, status, department, activityDate, body } = req.body;
 
     if (!title || !body) {
         return res.status(400).json({ message: 'Title and body are required.' });
@@ -74,10 +96,10 @@ exports.updateGalleryItem = async (req, res) => {
     try {
         const result = await pool.query(
             `UPDATE content
-             SET title = $1, body = $2, status = $3, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $4
+             SET title = $1, summary = $2, body = $3, status = $4, updated_at = CURRENT_TIMESTAMP, published_at = $5
+             WHERE id = $6
              RETURNING *`,
-            [title, body, status, id]
+            [title, department, body, status, activityDate, id]
         );
 
         if (result.rowCount === 0) {

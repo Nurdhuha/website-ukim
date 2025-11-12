@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const path = require('path');
+const multer = require('multer');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -28,9 +30,6 @@ pool.connect((err, client, release) => {
 app.use(cors());
 app.use(express.json());
 
-const path = require('path');
-const multer = require('multer');
-
 // --- File Upload Setup ---
 // Make the 'uploads' directory publicly accessible
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -47,22 +46,20 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
-
-// --- Upload Endpoint ---
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).send({ message: 'Please upload a file.' });
+// Configure multer for image uploads
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'), false);
+    }
   }
-  // The file is uploaded, return the path to be stored in the database
-  // The path should be relative to the server's root URL
-  res.status(200).send({
-    message: 'File uploaded successfully.',
-    // The path includes the '/uploads/' prefix which we made static
-    filePath: `/uploads/${req.file.filename}`
-  });
 });
 
+// Configure multer for PDF uploads
 const pdfUpload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
@@ -75,28 +72,61 @@ const pdfUpload = multer({
   }
 });
 
-app.post('/api/upload-pdf', pdfUpload.single('pdf'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).send({ message: 'Please upload a PDF file.' });
-  }
-  res.status(200).send({
-    message: 'File uploaded successfully.',
-    filePath: `/uploads/${req.file.filename}`
-  });
+// --- Upload Endpoints ---
+app.post('/api/upload', (req, res) => {
+    upload.single('file')(req, res, function (err) {
+        if (err instanceof multer.MulterError) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).send({ message: 'File is too large. Max size is 2MB.' });
+            }
+            return res.status(400).send({ message: err.message });
+        } else if (err) {
+            return res.status(400).send({ message: err.message });
+        }
+
+        if (!req.file) {
+            return res.status(400).send({ message: 'Please upload a file.' });
+        }
+        
+        res.status(200).send({
+            message: 'File uploaded successfully.',
+            filePath: `/uploads/${req.file.filename}`
+        });
+    });
 });
+
+app.post('/api/upload-pdf', (req, res) => {
+    pdfUpload.single('pdf')(req, res, function (err) {
+        if (err) {
+            return res.status(400).send({ message: err.message });
+        }
+
+        if (!req.file) {
+            return res.status(400).send({ message: 'Please upload a PDF file.' });
+        }
+
+        res.status(200).send({
+            message: 'File uploaded successfully.',
+            filePath: `/uploads/${req.file.filename}`
+        });
+    });
+});
+
 
 // Import routes
 const contentRoutes = require('./routes/content.routes');
 const eventRoutes = require('./routes/event.routes');
+const galleryRoutes = require('./routes/gallery.routes');
 
 // Basic API Route
 app.get('/', (req, res) => {
   res.send('Backend is running and connected to PostgreSQL!');
 });
 
-// Use content routes
+// Use routes
 app.use('/api/content', contentRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/gallery', galleryRoutes);
 
 // Start the server
 app.listen(port, () => {

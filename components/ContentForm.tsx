@@ -9,13 +9,18 @@ interface ContentFormProps {
   refreshData: () => void;
 }
 
-const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, refreshData, category }) => {
-  const [formData, setFormData] = useState<any>({});
+const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, refreshData }) => {
+  const [formData, setFormData] = useState<any>({
+    title: '',
+    status: 'draft',
+    department: '',
+    activityDate: '',
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [selectedContentFile, setSelectedContentFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<string[]>([]);
 
   const isEditMode = item && item.id;
 
@@ -32,18 +37,39 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
             }
         }
         
-        setFormData(newItem);
-        if (newItem.body?.imageUrl) {
-          setPreview(`http://localhost:5000${newItem.body.imageUrl}`);
+        if (view === 'events') {
+            const startDate = newItem.start_date ? new Date(newItem.start_date).toISOString().split('T')[0] : '';
+            const endDate = newItem.end_date ? new Date(newItem.end_date).toISOString().split('T')[0] : '';
+            setFormData({
+                ...newItem,
+                start_date: startDate,
+                end_date: endDate,
+            });
+        } else {
+            const activityDate = newItem.activityDate ? new Date(newItem.activityDate).toISOString().split('T')[0] : '';
+            setFormData({
+                ...newItem,
+                department: newItem.summary, // Map summary to department
+                activityDate: activityDate,
+            });
+        }
+
+        if (view === 'gallery' && newItem.body?.imageUrls) {
+            setPreviews(newItem.body.imageUrls.map((url: string) => `http://localhost:5000${url}`));
+        } else if (newItem.body?.imageUrl) {
+            setPreviews([`http://localhost:5000${newItem.body.imageUrl}`]);
         }
     }
-  }, [item, view, isEditMode]);
+  }, [item, view]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setPreview(URL.createObjectURL(file));
+    const files = e.target.files;
+    if (files) {
+      const fileArray = Array.from(files).slice(0, 3); // Max 3 files
+      setSelectedFiles(fileArray);
+      
+      const filePreviews = fileArray.map(file => URL.createObjectURL(file));
+      setPreviews(filePreviews);
     }
   };
 
@@ -55,8 +81,15 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type } = e.target;
+    const isCheckbox = type === 'checkbox';
+    // @ts-ignore
+    const checked = e.target.checked;
+
+    setFormData({ 
+        ...formData, 
+        [name]: isCheckbox ? checked : value 
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,23 +99,29 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
 
     try {
       let imageUrl = formData.body?.imageUrl || '';
+      let imageUrls: string[] = formData.body?.imageUrls || [];
       let contentFileUrl = formData.body?.contentFileUrl || '';
 
-      if (selectedFile) {
-        const uploadFormData = new FormData();
-        uploadFormData.append('file', selectedFile);
-
-        const uploadResponse = await fetch('http://localhost:5000/api/upload', {
-          method: 'POST',
-          body: uploadFormData,
+      if (selectedFiles.length > 0) {
+        const uploadPromises = selectedFiles.map(file => {
+            const uploadFormData = new FormData();
+            uploadFormData.append('file', file);
+            return fetch('http://localhost:5000/api/upload', {
+                method: 'POST',
+                body: uploadFormData,
+            }).then(res => {
+                if (!res.ok) throw new Error('Failed to upload an image.');
+                return res.json();
+            });
         });
 
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload image.');
+        const uploadResults = await Promise.all(uploadPromises);
+        
+        if (view === 'gallery') {
+            imageUrls = uploadResults.map(result => result.filePath);
+        } else {
+            imageUrl = uploadResults[0]?.filePath || imageUrl;
         }
-
-        const uploadResult = await uploadResponse.json();
-        imageUrl = uploadResult.filePath;
       }
       
       if (selectedContentFile) {
@@ -103,15 +142,36 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
       }
 
       const isEvent = view === 'events';
-      let url = isEvent ? '/api/events' : 'http://localhost:5000/api/content';
+      const isGallery = view === 'gallery';
+      
+      let url;
+      if (isEvent) {
+        url = '/api/events';
+      } else if (isGallery) {
+        url = 'http://localhost:5000/api/gallery';
+      } else {
+        url = 'http://localhost:5000/api/content';
+      }
+
       if (isEditMode) {
         url = `${url}/${item.id}`;
       }
 
-      const dataToSend = { ...formData };
-      if (!isEvent) {
+      let dataToSend: any;
+      if (isGallery) {
+        dataToSend = {
+          title: formData.title,
+          status: formData.status,
+          department: formData.department,
+          activityDate: formData.activityDate,
+          body: { imageUrls },
+        }
+      } else if (!isEvent) {
+        dataToSend = { ...formData };
         dataToSend.type = view;
         dataToSend.body = { ...dataToSend.body, imageUrl, contentFileUrl };
+      } else {
+        dataToSend = { ...formData };
       }
 
       const response = await fetch(url, {
@@ -151,7 +211,7 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
           required
         />
       </div>
-      {view !== 'events' && (
+      {view !== 'events' && view !== 'gallery' && (
         <>
           <div className="mb-4">
             <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Slug</label>
@@ -172,26 +232,70 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
               className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
             />
           </div>
-           <div className="mb-4">
-            <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Status</label>
-            <select
-                name="status"
-                value={formData.status || 'draft'}
-                onChange={handleInputChange}
-                className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
-            >
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-            </select>
-          </div>
         </>
+      )}
+      {view !== 'events' && (
+        <div className="mb-4">
+          <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Status</label>
+          <select
+              name="status"
+              value={formData.status || 'draft'}
+              onChange={handleInputChange}
+              className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+          >
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+          </select>
+        </div>
       )}
     </>
   );
 
   const renderDynamicFields = () => {
     switch (view) {
-
+      case 'gallery':
+        return (
+            <>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Department</label>
+                    <input
+                        type="text"
+                        name="department"
+                        value={formData.department || ''}
+                        onChange={handleInputChange}
+                        className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                    />
+                </div>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Activity Date</label>
+                    <input
+                        type="date"
+                        name="activityDate"
+                        value={formData.activityDate || ''}
+                        onChange={handleInputChange}
+                        className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                    />
+                </div>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Images (up to 3, max 2MB each)</label>
+                    <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleFileChange}
+                        className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400"
+                    />
+                    <div className="mt-4 flex flex-wrap gap-4">
+                        {previews.map((previewUrl, index) => (
+                            <div key={index} className="relative">
+                                <img src={previewUrl} alt={`Preview ${index + 1}`} className="w-32 h-32 object-cover rounded-lg shadow-md" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </>
+        );
+      // ... other cases
       case 'pengumuman':
         return (
           <div className="mb-4">
@@ -202,9 +306,9 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
               onChange={handleFileChange}
               className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400"
             />
-            {preview && (
+            {previews[0] && (
               <div className="mt-4">
-                <img src={preview} alt="Image Preview" className="w-48 h-auto rounded-lg shadow-md" />
+                <img src={previews[0]} alt="Image Preview" className="w-48 h-auto rounded-lg shadow-md" />
                 <p className="text-xs text-gray-500 mt-1">Image Preview</p>
               </div>
             )}
@@ -234,9 +338,9 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
                 onChange={handleFileChange}
                 className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400"
               />
-              {preview && (
+              {previews[0] && (
                 <div className="mt-4">
-                  <img src={preview} alt="Image Preview" className="w-48 h-auto rounded-lg shadow-md" />
+                  <img src={previews[0]} alt="Image Preview" className="w-48 h-auto rounded-lg shadow-md" />
                   <p className="text-xs text-gray-500 mt-1">Image Preview</p>
                 </div>
               )}
@@ -254,7 +358,6 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
           </>
         );
       case 'achievements':
-      case 'gallery':
       case 'prestasi':
       case 'galeri':
         return (
@@ -266,9 +369,9 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
               onChange={handleFileChange}
               className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-gray-400 focus:outline-none dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400"
             />
-            {preview && (
+            {previews[0] && (
               <div className="mt-4">
-                <img src={preview} alt="Image Preview" className="w-48 h-auto rounded-lg shadow-md" />
+                <img src={previews[0]} alt="Image Preview" className="w-48 h-auto rounded-lg shadow-md" />
                 <p className="text-xs text-gray-500 mt-1">Image Preview</p>
               </div>
             )}
@@ -277,7 +380,84 @@ const ContentForm: React.FC<ContentFormProps> = ({ item, view, setEditingItem, r
       case 'events':
         return (
             <>
-                {/* Event fields... */}
+                <div className="mb-4">
+                    <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Description</label>
+                    <textarea
+                        name="description"
+                        value={formData.description || ''}
+                        onChange={handleInputChange}
+                        rows={4}
+                        className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                    />
+                </div>
+                <div className="mb-4">
+                    <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Location</label>
+                    <input
+                        type="text"
+                        name="location"
+                        value={formData.location || ''}
+                        onChange={handleInputChange}
+                        className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                    />
+                </div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Start Date</label>
+                        <input
+                            type="date"
+                            name="start_date"
+                            value={formData.start_date || ''}
+                            onChange={handleInputChange}
+                            className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">End Date</label>
+                        <input
+                            type="date"
+                            name="end_date"
+                            value={formData.end_date || ''}
+                            onChange={handleInputChange}
+                            className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                        />
+                    </div>
+                </div>
+                <div className="flex items-center mb-4">
+                    <input
+                        id="is_all_day"
+                        type="checkbox"
+                        name="is_all_day"
+                        checked={formData.is_all_day || false}
+                        onChange={handleInputChange}
+                        className="w-4 h-4 text-brand-blue bg-gray-100 border-gray-300 rounded focus:ring-brand-blue dark:focus:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <label htmlFor="is_all_day" className="ml-2 text-sm font-medium text-gray-900 dark:text-gray-300">All-day event</label>
+                </div>
+                {!formData.is_all_day && (
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">Start Time</label>
+                            <input
+                                type="time"
+                                name="start_time"
+                                value={formData.start_time || ''}
+                                onChange={handleInputChange}
+                                className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold mb-2 text-gray-700 dark:text-gray-300">End Time</label>
+                            <input
+                                type="time"
+                                name="end_time"
+                                value={formData.end_time || ''}
+                                onChange={handleInputChange}
+                                className="bg-gray-50 border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-blue focus:border-brand-blue block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-brand-blue dark:focus:border-brand-blue"
+                            />
+                        </div>
+                    </div>
+                )}
             </>
         );
       default:

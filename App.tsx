@@ -799,9 +799,9 @@ const AppBody: React.FC = () => {
   };
 
   return (
-    <div className="font-serif bg-white dark:bg-brand-charcoal text-brand-charcoal dark:text-gray-300 transition-colors duration-300 overflow-x-hidden">
+    <div className="flex flex-col min-h-screen font-serif bg-white dark:bg-brand-charcoal text-brand-charcoal dark:text-gray-300 transition-colors duration-300 overflow-x-hidden">
       {currentPage !== 'admin' && <Header currentPage={currentPage} setPage={setCurrentPage} />}
-      <main>
+      <main className="flex-grow">
         {renderPage()}
       </main>
       {currentPage !== 'admin' && <Footer />}
