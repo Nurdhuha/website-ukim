@@ -4,7 +4,7 @@ import { Card } from './Card';
 import ConfirmationModal from './ConfirmationModal';
 
 interface ContentTableProps {
-  view: 'news' | 'achievements' | 'gallery' | 'events' | 'pages';
+  view: 'akademik' | 'pengumuman' | 'artikel' | 'prestasi' | 'galeri' | 'events' | 'pages';
   setEditingItem: (item: any) => void;
   refreshKey: number;
   refreshData: () => void;
@@ -86,7 +86,7 @@ const ContentTable: React.FC<ContentTableProps> = ({ view, setEditingItem, refre
             variant="primary" 
             onClick={() => setEditingItem({})}
           >
-            Create New {view.charAt(0).toUpperCase() + view.slice(1, -1)}
+            Create New {view.charAt(0).toUpperCase() + view.slice(1)}
           </Button>
         </div>
         <div className="overflow-x-auto">

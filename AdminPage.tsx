@@ -3,7 +3,7 @@ import AdminLayout from './components/AdminLayout';
 import ContentTable from './components/ContentTable';
 import ContentForm from './components/ContentForm';
 
-type AdminView = 'dashboard' | 'news' | 'achievements' | 'gallery' | 'events' | 'pages';
+type AdminView = 'dashboard' | 'akademik' | 'pengumuman' | 'artikel' | 'prestasi' | 'galeri' | 'events' | 'pages';
 
 const AdminPage = () => {
   const [currentView, setCurrentView] = useState<AdminView>('dashboard');
@@ -16,9 +16,12 @@ const AdminPage = () => {
 
   const viewTitles: Record<AdminView, string> = {
     dashboard: 'Dashboard',
-    news: 'Manage News',
-    achievements: 'Manage Achievements',
-    gallery: 'Manage Gallery',
+    akademik: 'Manage Akademik',
+    pengumuman: 'Manage Pengumuman',
+    artikel: 'Manage Artikel',
+    prestasi: 'Manage Prestasi',
+
+    galeri: 'Manage Galeri',
     events: 'Manage Events',
     pages: 'Manage Pages',
   };

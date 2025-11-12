@@ -146,25 +146,45 @@ const ArticlesSection = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchArticles = async () => {
+    const fetchAllContent = async () => {
       try {
-        const response = await fetch('/api/content/news'); // Fetch news articles
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data: Article[] = await response.json();
-        setArticles(data);
+        const contentTypes = ['akademik', 'pengumuman', 'artikel'];
+        const promises = contentTypes.map(type =>
+          fetch(`/api/content/${type}`).then(res => {
+            if (!res.ok) {
+              console.error(`HTTP error! status: ${res.status} for type ${type}`);
+              return []; // Return empty array on error for this type
+            }
+            return res.json();
+          })
+        );
+        const results = await Promise.all(promises);
+        const allContent = results.flat();
+        
+        const formattedContent = allContent.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          summary: item.summary,
+          imageUrl: item.body?.imageUrl || 'https://picsum.photos/seed/1/400/300', // Placeholder
+          category: item.content_type_name, // This is from the backend
+          date: item.published_at,
+        }));
+
+        // Sort by date descending
+        formattedContent.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        setArticles(formattedContent);
       } catch (err) {
-        setError('Gagal memuat artikel.');
-        console.error('Error fetching articles:', err);
+        setError('Gagal memuat konten.');
+        console.error('Error fetching content:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchArticles();
+    fetchAllContent();
   }, []);
 
-  if (loading) return <section className="py-20 text-center dark:text-white">Memuat artikel...</section>;
+  if (loading) return <section className="py-20 text-center dark:text-white">Memuat informasi...</section>;
   if (error) return <section className="py-20 text-center text-red-500">{error}</section>;
 
   return (
@@ -172,8 +192,8 @@ const ArticlesSection = () => {
       <div className="container mx-auto px-6">
         <SectionTitle
           icon={<BookOpenIcon className="w-8 h-8" />}
-          title="Artikel & Wawasan Terbaru"
-          subtitle="Jelajahi publikasi, riset, dan analisis terbaru kami."
+          title="Informasi Terbaru"
+          subtitle="Jelajahi pengumuman, publikasi, dan analisis terbaru kami."
         />
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {articles.slice(0, 3).map(article => <ArticleCard key={article.id} article={article} />)}
@@ -449,22 +469,39 @@ const RepositoryPage = () => {
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   
   useEffect(() => {
-    const fetchAllArticles = async () => {
+    const fetchAllContent = async () => {
       try {
-        const response = await fetch('/api/content/news'); // Fetch all news articles
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data: Article[] = await response.json();
-        setAllArticles(data);
+        const contentTypes = ['akademik', 'pengumuman', 'artikel'];
+        const promises = contentTypes.map(type =>
+          fetch(`/api/content/${type}`).then(res => {
+            if (!res.ok) {
+              console.error(`HTTP error! status: ${res.status} for type ${type}`);
+              return []; // Return empty array on error for this type
+            }
+            return res.json();
+          })
+        );
+        const results = await Promise.all(promises);
+        const allContent = results.flat();
+        
+        const formattedContent = allContent.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          summary: item.summary,
+          imageUrl: item.body?.imageUrl || 'https://picsum.photos/seed/1/400/300', // Placeholder
+          category: item.content_type_name, // This is from the backend
+          date: item.published_at,
+        }));
+
+        setAllArticles(formattedContent);
       } catch (err) {
-        setError('Gagal memuat artikel untuk repositori.');
-        console.error('Error fetching repository articles:', err);
+        setError('Gagal memuat konten untuk repositori.');
+        console.error('Error fetching repository content:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchAllArticles();
+    fetchAllContent();
   }, []);
 
   const categories = useMemo(() => {

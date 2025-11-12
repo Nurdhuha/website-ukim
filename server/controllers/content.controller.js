@@ -36,22 +36,56 @@ const getContentByType = async (contentTypeSlug) => {
       `;
       params = [];
       break;
-    case 'news':
+    case 'pengumuman':
       query = `
         SELECT 
           c.id, c.title, c.slug, c.summary, 
+          ct.name as content_type_name,
           c.body->>'imageUrl' as "imageUrl",
-          c.body->>'category' as category,
           c.published_at as date,
           u.username as author_username
         FROM content c
         JOIN content_types ct ON c.content_type_id = ct.id
         LEFT JOIN users u ON c.author_id = u.id
-        WHERE ct.slug = 'news' AND c.status = 'published'
+        WHERE ct.slug = 'pengumuman' AND c.status = 'published'
         ORDER BY c.published_at DESC
       `;
       params = [];
       break;
+    case 'akademik':
+      query = `
+        SELECT 
+          c.id, c.title, c.slug, c.summary, 
+          ct.name as content_type_name,
+          c.body->>'contentFileUrl' as "contentFileUrl",
+          c.published_at as date,
+          u.username as author_username
+        FROM content c
+        JOIN content_types ct ON c.content_type_id = ct.id
+        LEFT JOIN users u ON c.author_id = u.id
+        WHERE ct.slug = 'akademik' AND c.status = 'published'
+        ORDER BY c.published_at DESC
+      `;
+      params = [];
+      break;
+    case 'artikel':
+      query = `
+        SELECT 
+          c.id, c.title, c.slug, c.summary, 
+          ct.name as content_type_name,
+          c.body->>'imageUrl' as "imageUrl",
+          c.body->>'content' as "content",
+          c.published_at as date,
+          u.username as author_username
+        FROM content c
+        JOIN content_types ct ON c.content_type_id = ct.id
+        LEFT JOIN users u ON c.author_id = u.id
+        WHERE ct.slug = 'artikel' AND c.status = 'published'
+        ORDER BY c.published_at DESC
+      `;
+      params = [];
+      break;
+
     default:
       query = `
         SELECT 
@@ -87,18 +121,19 @@ exports.getPublicContentByType = async (req, res) => {
 
 // GET all content for admin (includes drafts)
 exports.getAllAdminContent = async (req, res) => {
-  const { type } = req.query;
+  const { type, category } = req.query;
   if (!type) {
     return res.status(400).json({ message: 'Content type query parameter is required.' });
   }
   try {
-    const result = await pool.query(
-      `SELECT c.*, ct.name as content_type_name FROM content c
+    let queryText = `SELECT c.*, ct.name as content_type_name, c.body->>'category' as category FROM content c
        JOIN content_types ct ON c.content_type_id = ct.id
-       WHERE ct.slug = $1
-       ORDER BY c.updated_at DESC`,
-      [type]
-    );
+       WHERE ct.slug = $1`;
+    const params = [type];
+
+    queryText += ` ORDER BY c.updated_at DESC`;
+
+    const result = await pool.query(queryText, params);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching admin content:', err);
@@ -110,16 +145,18 @@ exports.getAllAdminContent = async (req, res) => {
 exports.createContent = async (req, res) => {
   const { type, title, slug, summary, body, status, published_at } = req.body;
 
-  if (!type || !title || !body) {
-    return res.status(400).json({ message: 'Type, title, and body are required.' });
+  if (!type || !title) {
+    return res.status(400).json({ message: 'Type and title are required.' });
   }
 
   try {
+    const finalBody = { ...body };
+
     const result = await pool.query(
       `INSERT INTO content (content_type_id, title, slug, summary, body, author_id, status, published_at)
        VALUES ((SELECT id FROM content_types WHERE slug = $1), $2, $3, $4, $5, (SELECT id FROM users WHERE username = 'admin'), $6, $7)
        RETURNING *`,
-      [type, title, slug, summary, body, status || 'draft', published_at]
+      [type, title, slug, summary, finalBody, status || 'draft', published_at]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -133,17 +170,19 @@ exports.updateContent = async (req, res) => {
   const { id } = req.params;
   const { title, slug, summary, body, status, published_at } = req.body;
 
-  if (!title || !body) {
-    return res.status(400).json({ message: 'Title and body are required.' });
+  if (!title) {
+    return res.status(400).json({ message: 'Title is required.' });
   }
 
   try {
+    const finalBody = { ...body };
+    
     const result = await pool.query(
       `UPDATE content
        SET title = $1, slug = $2, summary = $3, body = $4, status = $5, published_at = $6, updated_at = CURRENT_TIMESTAMP
        WHERE id = $7
        RETURNING *`,
-      [title, slug, summary, body, status, published_at, id]
+      [title, slug, summary, finalBody, status, published_at, id]
     );
 
     if (result.rowCount === 0) {

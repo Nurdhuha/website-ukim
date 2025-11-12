@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Dashboard, News, Achievements, Gallery, Events, Pages, MenuIcon } from './icons';
 
-type AdminView = 'dashboard' | 'news' | 'achievements' | 'gallery' | 'events' | 'pages';
+type AdminView = 'dashboard' | 'akademik' | 'pengumuman' | 'artikel' | 'prestasi' | 'galeri' | 'events' | 'pages';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -15,9 +15,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, currentView, setCur
 
   const navItems: { id: AdminView; label: string; icon: JSX.Element }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <Dashboard /> },
-    { id: 'news', label: 'News', icon: <News /> },
-    { id: 'achievements', label: 'Achievements', icon: <Achievements /> },
-    { id: 'gallery', label: 'Gallery', icon: <Gallery /> },
+    { id: 'akademik', label: 'Akademik', icon: <News /> },
+    { id: 'pengumuman', label: 'Pengumuman', icon: <News /> },
+    { id: 'artikel', label: 'Artikel', icon: <News /> },
+    { id: 'prestasi', label: 'Prestasi', icon: <Achievements /> },
+
+    { id: 'galeri', label: 'Galeri', icon: <Gallery /> },
     { id: 'events', label: 'Events', icon: <Events /> },
     { id: 'pages', label: 'Pages', icon: <Pages /> },
   ];

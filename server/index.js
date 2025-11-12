@@ -50,7 +50,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // --- Upload Endpoint ---
-app.post('/api/upload', upload.single('image'), (req, res) => {
+app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).send({ message: 'Please upload a file.' });
   }
@@ -59,6 +59,28 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
   res.status(200).send({
     message: 'File uploaded successfully.',
     // The path includes the '/uploads/' prefix which we made static
+    filePath: `/uploads/${req.file.filename}`
+  });
+});
+
+const pdfUpload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed!'), false);
+    }
+  }
+});
+
+app.post('/api/upload-pdf', pdfUpload.single('pdf'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).send({ message: 'Please upload a PDF file.' });
+  }
+  res.status(200).send({
+    message: 'File uploaded successfully.',
     filePath: `/uploads/${req.file.filename}`
   });
 });
