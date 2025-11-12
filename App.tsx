@@ -68,8 +68,7 @@ const AchievementCard: React.FC<{ achievement: Achievement }> = ({ achievement }
   <Card className="flex flex-col items-center text-center p-6">
     <img className="h-40 w-40 rounded-full object-cover border-4 border-white dark:border-gray-700 shadow-lg" src={achievement.imageUrl} alt={achievement.title} />
     <h3 className="mt-4 text-xl font-bold font-sans dark:text-white">{achievement.title}</h3>
-    <p className="mt-2 text-gray-600 dark:text-gray-400 font-serif">{achievement.description}</p>
-    <p className="mt-4 text-sm text-gray-500">{new Date(achievement.date).toLocaleDateString()}</p>
+    <p className="mt-2 text-gray-600 dark:text-gray-400 font-serif">{achievement.description || (achievement as any).summary}</p>
   </Card>
 );
 
@@ -126,11 +125,11 @@ const KeyAreasSection = () => (
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
                 {KEY_AREAS.map((area, index) => (
-                    <Card key={index} className="text-center p-8 !bg-white dark:!bg-gray-800">
-                        <div className="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-blue-100 dark:bg-gray-700 text-brand-blue dark:text-brand-yellow">
+                    <Card key={index} className="group text-center p-8 !bg-white dark:!bg-gray-800 transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                        <div className="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-blue-100 dark:bg-gray-700 text-brand-blue dark:text-brand-yellow group-hover:scale-110 transition-transform duration-300">
                             {area.icon}
                         </div>
-                        <h3 className="text-xl font-bold font-sans dark:text-white">{area.title}</h3>
+                        <h3 className="text-xl font-bold font-sans dark:text-white group-hover:scale-105 group-hover:text-brand-blue dark:group-hover:text-brand-yellow transition-transform transition-colors duration-300">{area.title}</h3>
                         <p className="mt-2 text-gray-600 dark:text-gray-400 font-serif text-sm">{area.description}</p>
                     </Card>
                 ))}
@@ -218,12 +217,23 @@ const CalendarWidget = ({ events }: { events: Event[] }) => {
 
     const eventsByDate = useMemo(() => {
         const map = new Map<string, Event[]>();
+        if (!events) return map;
+        const timeZone = 'Asia/Jakarta'; // GMT+7
+
         events.forEach(event => {
-            const dateStr = event.start_date.split('T')[0]; // Get YYYY-MM-DD part
-            if (!map.has(dateStr)) {
-                map.set(dateStr, []);
+            const startDate = new Date(event.start_date);
+            const endDate = event.end_date ? new Date(event.end_date) : startDate;
+
+            let currentDate = new Date(startDate);
+            // Ensure we loop through days correctly even across timezone shifts
+            while (currentDate.toISOString().split('T')[0] <= endDate.toISOString().split('T')[0]) {
+                const dateStr = new Date(currentDate).toLocaleDateString('en-CA', { timeZone });
+                if (!map.has(dateStr)) {
+                    map.set(dateStr, []);
+                }
+                map.get(dateStr)?.push(event);
+                currentDate.setDate(currentDate.getDate() + 1);
             }
-            map.get(dateStr)?.push(event);
         });
         return map;
     }, [events]);
@@ -234,14 +244,15 @@ const CalendarWidget = ({ events }: { events: Event[] }) => {
 
     const renderDays = () => {
         const days = [];
+        const timeZone = 'Asia/Jakarta'; // GMT+7
         for (let i = 0; i < firstDayOfMonth; i++) {
             days.push(<div key={`empty-${i}`} className="border-r border-b border-gray-200 dark:border-gray-700"></div>);
         }
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
-            const isToday = date.toDateString() === today.toDateString();
+            const isToday = date.toLocaleDateString('en-CA', { timeZone }) === new Date().toLocaleDateString('en-CA', { timeZone });
             
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dateStr = date.toLocaleDateString('en-CA', { timeZone });
             const dayEvents = eventsByDate.get(dateStr) || [];
             const hasEvent = dayEvents.length > 0;
 
@@ -298,6 +309,7 @@ const EventsAndAchievementsSection = () => {
   const [loadingAchievements, setLoadingAchievements] = useState(true);
   const [errorEvents, setErrorEvents] = useState<string | null>(null);
   const [errorAchievements, setErrorAchievements] = useState<string | null>(null);
+  const [currentAchievementIndex, setCurrentAchievementIndex] = useState(0);
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -305,7 +317,6 @@ const EventsAndAchievementsSection = () => {
         const response = await fetch('/api/events');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data: Event[] = await response.json();
-        console.log('Fetched events:', data); // Debug log
         setEvents(data);
       } catch (err) {
         setErrorEvents('Gagal memuat kegiatan mendatang.');
@@ -317,7 +328,7 @@ const EventsAndAchievementsSection = () => {
 
     const fetchAchievements = async () => {
       try {
-        const response = await fetch('/api/content/achievement');
+        const response = await fetch('/api/content/prestasi');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data: Achievement[] = await response.json();
         setAchievements(data);
@@ -345,6 +356,20 @@ const EventsAndAchievementsSection = () => {
       .slice(0, 3);
   }, [events]);
 
+  const latestAchievements = useMemo(() => {
+    return achievements.slice(0, 3);
+  }, [achievements]);
+
+  useEffect(() => {
+    if (latestAchievements.length > 1) {
+      const timer = setInterval(() => {
+        setCurrentAchievementIndex(prevIndex => (prevIndex + 1) % latestAchievements.length);
+      }, 5000); // Change card every 5 seconds
+
+      return () => clearInterval(timer); // Cleanup on component unmount
+    }
+  }, [latestAchievements.length]);
+
   const currentYear = new Date().getFullYear();
   const achievementsCurrentYear = achievements.filter(
     (ach) => new Date(ach.date).getFullYear() === currentYear
@@ -352,6 +377,8 @@ const EventsAndAchievementsSection = () => {
   const achievementsPreviousYear = achievements.filter(
     (ach) => new Date(ach.date).getFullYear() === currentYear - 1
   ).length;
+
+  const displayedAchievement = latestAchievements[currentAchievementIndex];
 
   return (
     <section className="py-20 bg-brand-light-gray dark:bg-gray-900">
@@ -438,7 +465,7 @@ const EventsAndAchievementsSection = () => {
                   </div>
                 </div>
                 <div className="mt-8">
-                  {achievements.slice(0, 1).map(achievement => <AchievementCard key={achievement.id} achievement={achievement} />)}
+                  {displayedAchievement && <AchievementCard key={displayedAchievement.id} achievement={displayedAchievement} />}
                 </div>
               </>
             )}

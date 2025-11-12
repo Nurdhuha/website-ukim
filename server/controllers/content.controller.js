@@ -36,6 +36,17 @@ const getContentByType = async (contentTypeSlug) => {
       `;
       params = [];
       break;
+    case 'prestasi':
+      query = `
+        SELECT 
+          c.id, c.title, c.summary as description, c.body->>'imageUrl' as "imageUrl", c.published_at as date
+        FROM content c
+        JOIN content_types ct ON c.content_type_id = ct.id
+        WHERE ct.slug = 'prestasi' AND c.status = 'published'
+        ORDER BY c.published_at DESC
+      `;
+      params = [];
+      break;
     case 'pengumuman':
       query = `
         SELECT 
